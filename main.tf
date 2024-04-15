@@ -7,9 +7,9 @@ resource "aws_internet_gateway" "igw" {
 }
 
 resource "aws_route_table" "rt" {
-  vpc_id = aws_internet_gateway.myvpc.id
+  vpc_id = aws_vpc.myvpc.id
   route {
-    cidr_block = "0.0.0.0/0"  #class interdomain routing
+    cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id  
 
   }
@@ -17,16 +17,15 @@ resource "aws_route_table" "rt" {
 
 resource "aws_subnet" "sub1" {
   vpc_id = aws_vpc.myvpc.id
-  cidr_block = "10.0.0.0/24" 
+  cidr_block = var.sub1_cidr
   availability_zone = "us-east-1a"
-  
   map_public_ip_on_launch = true 
 
 }
 
 resource "aws_subnet" "sub2" {
   vpc_id = aws_vpc.myvpc.id
-  cidr_block = "10.0.1.0/24" 
+  cidr_block = var.sub2_cidr 
   availability_zone = "us-east-1b"
   map_public_ip_on_launch = true 
 }
@@ -44,15 +43,7 @@ resource "aws_route_table_association" "rta2" {
   route_table_id = aws_route_table.rt.id
 }
 
-#SG for LB and EC2
-#default SG for public and private ec2 instances:
-#allow all outbound connections (egress)
-#deny all inblound connections (igress)
-#kakve veze imauju sg sa public/private subnets? Koja je poenta public/private subneta?
-
-
-#SG ready to use on instances (instance level security)
-resource "aws_security_group" "mysq" {
+resource "aws_security_group" "mysg" {
   name_prefix = "websg"
   vpc_id = aws_vpc.myvpc.id
 
@@ -78,33 +69,26 @@ resource "aws_security_group" "mysq" {
     cidr_blocks = ["0.0.0.0/0"]
 
   }
-
-
-
-
-
 }
 
-resource "aws_s3_bucket" "bucket" {
+resource "aws_s3_bucket" "s3bck" {
   bucket = "our_terraform_bucket_for_project"
 }
 
 resource "aws_instance" "webServerOne" {
-  ami = "ami-..."
-  instance_type = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.mysq.id]
+  ami = var.ubuntu_ami
+  instance_type = var.instance
+  vpc_security_group_ids = [aws_security_group.mysg.id]
   subnet_id = aws_subnet.sub1.id
-  #script
-  user_data = base64decode(file(userdata.sh))
+  user_data = base64decode(file(machine1.sh))
 }
 
 resource "aws_instance" "webServerTwo" {
-  ami = "ami-..."
-  instance_type = "t2.micro"
-  vpc_security_group_ids = [aws_security_group.mysq.id]
+  ami = var.ubuntu_ami
+  instance_type = var.instance
+  vpc_security_group_ids = [aws_security_group.mysg.id]
   subnet_id = aws_subnet.sub2.id
-  #script
-  user_data = base64decode(file(userdata1.sh))
+  user_data = base64decode(file(machine2.sh))
 }
 
 #load balancer - L7 lb
@@ -115,7 +99,7 @@ resource "aws_lb" "mylb" {
   internal = false #
   load_balancer_type = "application"
 
-  security_groups = [aws_security_group.mysq.id]
+  security_groups = [aws_security_group.mysg.id]
   subnets = [aws_subnet.sub1.id, aws_subnet.sub2.id]
 
   tags = {
